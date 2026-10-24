@@ -56,9 +56,9 @@ jobs:
             lipo -info "$b"
             lipo "$b" -verify_arch arm64 x86_64 || { echo "::error::$b is not universal"; exit 1; }
             for a in x86_64 arm64; do
-              minos=$(vtool -arch $a -show-build "$b" | awk '/minos/ {print $2}')
+              minos=$(vtool -arch $a -show-build "$b" | awk '$1=="minos" || $1=="version" {print $2; exit}')
               echo "$a minimum macOS: $minos"
-              [ "${minos%%.*}" -le 11 ] || { echo "::error::$a build needs macOS $minos"; exit 1; }
+              [ -n "$minos" ] && [ "${minos%%.*}" -le 11 ] || { echo "::error::$a build needs macOS $minos"; exit 1; }
             done
           done
 
