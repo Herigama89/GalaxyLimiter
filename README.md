@@ -97,14 +97,9 @@ Source/
 
 ## Automatic builds (GitHub Actions)
 
-Every push to `main` builds the plugins on a GitHub-hosted Mac (`.github/workflows/build-mac.yml`).
-The installer appears under the run's **Artifacts** on the Actions tab.
+Every push to `main` builds the plugins on a GitHub-hosted Mac (`.github/workflows/build-mac.yml`),
+validates the Audio Unit, and publishes the `.pkg` installer, a zip of the raw plugins and the manual
+on the **Releases** page as `v<VERSION>` (taken from `CMakeLists.txt`).
 
-To publish a permanent download, bump `VERSION` in `CMakeLists.txt`, then push a tag:
-
-```bash
-git tag v1.1.0
-git push origin v1.1.0
-```
-
-The `.pkg`, a zip of the raw plugins and the manual are attached to a new entry on the **Releases** page.
+To ship a new version, raise `VERSION` in `CMakeLists.txt` and push. Pushing again without changing
+the version replaces the files in the existing release.
