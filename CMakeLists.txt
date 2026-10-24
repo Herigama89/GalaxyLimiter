@@ -1,12 +1,14 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(GalaxyLimiter VERSION 1.1.0 LANGUAGES C CXX)
+# These two must come BEFORE project(), otherwise CMake ignores them and builds
+# only for the build machine's own chip and macOS version.
+set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version")
+set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Universal binary: Apple Silicon + Intel")
+
+project(GalaxyLimiter VERSION 1.1.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version")
-# Universal binary (Apple Silicon + Intel) on macOS
-set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 
 include(FetchContent)
 FetchContent_Declare(

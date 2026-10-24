@@ -32,7 +32,10 @@ jobs:
           key: juce-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
 
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
 
       - name: Build VST3 + AU (universal, Apple Silicon + Intel)
         run: cmake --build build --parallel 4
@@ -47,7 +50,17 @@ jobs:
           xattr -cr pkgroot
           codesign --force --deep -s - "$ROOT/VST3/Galaxy Limiter.vst3"
           codesign --force --deep -s - "$ROOT/Components/Galaxy Limiter.component"
-          lipo -info "$ROOT/VST3/Galaxy Limiter.vst3/Contents/MacOS/Galaxy Limiter"
+          # Refuse to ship anything that isn't universal or needs a new macOS
+          for b in "$ROOT/VST3/Galaxy Limiter.vst3/Contents/MacOS/Galaxy Limiter" \
+                   "$ROOT/Components/Galaxy Limiter.component/Contents/MacOS/Galaxy Limiter"; do
+            lipo -info "$b"
+            lipo "$b" -verify_arch arm64 x86_64 || { echo "::error::$b is not universal"; exit 1; }
+            for a in x86_64 arm64; do
+              minos=$(vtool -arch $a -show-build "$b" | awk '/minos/ {print $2}')
+              echo "$a minimum macOS: $minos"
+              [ "${minos%%.*}" -le 11 ] || { echo "::error::$a build needs macOS $minos"; exit 1; }
+            done
+          done
 
       - name: Validate the Audio Unit (auval)
         continue-on-error: true
