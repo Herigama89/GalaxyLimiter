@@ -1,0 +1,94 @@
+name: Build macOS installer
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to publish releases
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: ver
+        run: |
+          V=$(sed -nE 's/^project\(GalaxyLimiter VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Building Galaxy Limiter $V"
+
+      - name: Cache JUCE download
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build VST3 + AU (universal, Apple Silicon + Intel)
+        run: cmake --build build --parallel 4
+
+      - name: Collect and sign plugins
+        run: |
+          A=build/GalaxyLimiter_artefacts/Release
+          ROOT=pkgroot/Library/Audio/Plug-Ins
+          mkdir -p "$ROOT/VST3" "$ROOT/Components"
+          cp -R "$A/VST3/Galaxy Limiter.vst3"     "$ROOT/VST3/"
+          cp -R "$A/AU/Galaxy Limiter.component"  "$ROOT/Components/"
+          xattr -cr pkgroot
+          codesign --force --deep -s - "$ROOT/VST3/Galaxy Limiter.vst3"
+          codesign --force --deep -s - "$ROOT/Components/Galaxy Limiter.component"
+          lipo -info "$ROOT/VST3/Galaxy Limiter.vst3/Contents/MacOS/Galaxy Limiter"
+
+      - name: Validate the Audio Unit (auval)
+        continue-on-error: true
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "pkgroot/Library/Audio/Plug-Ins/Components/Galaxy Limiter.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 3
+          auval -v aufx Glxl Ycmp
+
+      - name: Build .pkg installer
+        run: |
+          chmod +x packaging/scripts/postinstall
+          pkgbuild --analyze --root pkgroot comp.plist
+          i=0; while /usr/libexec/PlistBuddy -c "Set :$i:BundleIsRelocatable false" comp.plist 2>/dev/null; do i=$((i+1)); done
+          pkgbuild --root pkgroot --component-plist comp.plist --scripts packaging/scripts \
+            --identifier com.yourcompany.galaxylimiter --version "${{ steps.ver.outputs.version }}" \
+            --install-location / "Galaxy Limiter ${{ steps.ver.outputs.version }}.pkg"
+          mkdir -p dist
+          mv "Galaxy Limiter ${{ steps.ver.outputs.version }}.pkg" dist/
+          cd pkgroot/Library/Audio/Plug-Ins
+          zip -qry "../../../../dist/Galaxy Limiter ${{ steps.ver.outputs.version }} plugins.zip" VST3 Components
+          cd -
+          ls -la dist
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: GalaxyLimiter-${{ steps.ver.outputs.version }}-macOS
+          path: dist/*
+
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Galaxy Limiter ${{ steps.ver.outputs.version }}
+          files: |
+            dist/*
+            Galaxy_Limiter_User_Manual.pdf
+          body: |
+            Galaxy Limiter ${{ steps.ver.outputs.version }} for macOS (Apple Silicon + Intel).
+
+            **Install:** download the `.pkg`, right-click it and choose **Open** (it isn't notarized), then follow the installer.
+            It installs the VST3 and Audio Unit into /Library/Audio/Plug-Ins.

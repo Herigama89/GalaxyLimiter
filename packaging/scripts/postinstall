@@ -1,0 +1,4 @@
+#!/bin/sh
+# Make Logic, LUNA and GarageBand rescan Audio Units after installing.
+killall -9 AudioComponentRegistrar 2>/dev/null
+exit 0
